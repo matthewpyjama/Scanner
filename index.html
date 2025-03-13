@@ -134,7 +134,7 @@
       const itemImage = document.getElementById('itemImage');
       const itemName = document.getElementById('item-name');
       const googleBtn = document.getElementById('google-btn');
-      const redirectBtn = document.getElementById('redirect-btn');
+      const redirectBtn = document.getElementAById('redirect-btn');
       const dismissBtn = document.getElementById('dismiss-btn');
       const reloadButton = document.getElementById('reload-button');
 
@@ -143,17 +143,21 @@
       async function initializeScanbot() {
         try {
           console.log('[DEBUG] Checking if ScanbotSDK is available...');
-          const scanbotSDK = await ScanbotSDK.initialize({
-  licenseKey: '',
-  enginePath: '/lib/'
-});
+          const ScanbotSDK = window.ScanbotSDK;
+          if (!ScanbotSDK) {
+            console.error('[DEBUG] ScanbotSDK is undefined. Check if lib/ScanbotSDK.min.js loaded correctly.');
+            throw new Error('Scanbot SDK not loaded. Check if lib/ScanbotSDK.min.js is accessible.');
+          }
           console.log('[DEBUG] ScanbotSDK object:', ScanbotSDK);
-          console.log('[DEBUG] Initializing SDK with enginePath: lib/');
+          console.log('[DEBUG] Initializing SDK with enginePath: /lib/');
           const scanbotSDK = await ScanbotSDK.initialize({
             licenseKey: '', // Empty for trial mode
-            enginePath: 'lib/' // Path to engine files
+            enginePath: '/lib/' // Absolute path to engine files
           });
           console.log('[DEBUG] SDK initialized successfully:', scanbotSDK);
+          if (!scanbotSDK) {
+            throw new Error('ScanbotSDK.initialize returned undefined.');
+          }
           return scanbotSDK;
         } catch (err) {
           console.error('[DEBUG] Scanbot initialization error:', err.message, err.stack);
@@ -166,10 +170,16 @@
         console.log('[DEBUG] Starting barcode scanner...');
         const sdk = await initializeScanbot();
         if (!sdk) {
-          console.log('[DEBUG] SDK initialization failed. Cannot start scanner.');
+          console.error('[DEBUG] SDK initialization failed. Cannot start scanner.');
+          status.textContent = 'Error: SDK initialization failed. Please reload and try again.';
           return;
         }
         console.log('[DEBUG] SDK object before UI call:', sdk);
+        if (!sdk.UI) {
+          console.error('[DEBUG] sdk.UI is undefined. SDK might not have loaded correctly.');
+          status.textContent = 'Error: SDK UI not available. Please reload and try again.';
+          return;
+        }
 
         try {
           status.textContent = 'Starting scanner...';
