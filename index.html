@@ -106,7 +106,7 @@
   </style>
 </head>
 <body>
-  <div id="status">Ready to scan (1-minute session)</div>
+  <div id="status">Initializing SDK...</div>
   <button id="scan-button">Scan Barcode</button>
   <div id="result">
     <h2>Scan Result</h2>
@@ -123,26 +123,26 @@
   </div>
 
   <!-- Load the Scanbot SDK -->
-  <script src="https://matthewpyjama.github.io/Scanner/lib/ScanbotSDK.UI2.min.js"></script>
+  <script src="https://matthewpyjama.github.io/Scanner/lib/ScanbotSDK.UI2.min.js" onload="onScriptLoaded()" onerror="onScriptError()"></script>
   <script>
-    window.onload = async function() {
-      const scanButton = document.getElementById('scan-button');
+    // Check if the script loaded successfully
+    function onScriptLoaded() {
+      console.log('ScanbotSDK.UI2.min.js loaded successfully');
+      initializeSDK();
+    }
+
+    function onScriptError() {
+      console.error('Failed to load ScanbotSDK.UI2.min.js');
       const status = document.getElementById('status');
-      const resultDiv = document.getElementById('result');
-      const barcodeType = document.getElementById('barcode-type');
-      const barcodeValue = document.getElementById('barcode-value');
-      const itemImage = document.getElementById('itemImage');
-      const itemName = document.getElementById('item-name');
-      const googleBtn = document.getElementById('google-btn');
-      const redirectBtn = document.getElementById('redirect-btn');
-      const dismissBtn = document.getElementById('dismiss-btn');
-      const reloadButton = document.getElementById('reload-button');
+      status.textContent = 'Error: Failed to load SDK script. Check Network tab and reload.';
+      document.getElementById('reload-button').style.display = 'block';
+    }
 
-      const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-kW76mbuh3ZZWe7ZB3kIkgVTYmsMJ7uluEcknSpxlCE3vKwMhoE8roTTAVhe3jmX/exec';
-
+    // Initialize the SDK
+    async function initializeSDK() {
+      const status = document.getElementById('status');
       let scanbotSDK = null;
 
-      // Initialize the Scanbot SDK
       try {
         console.log('Initializing Scanbot SDK...');
         scanbotSDK = await ScanbotSDK.initialize({
@@ -154,9 +154,23 @@
       } catch (error) {
         console.error('Initialization error:', error);
         status.textContent = 'Error: Failed to initialize SDK. Check console and reload.';
-        reloadButton.style.display = 'block';
+        document.getElementById('reload-button').style.display = 'block';
         return;
       }
+
+      // Setup DOM elements and event listeners
+      const scanButton = document.getElementById('scan-button');
+      const resultDiv = document.getElementById('result');
+      const barcodeType = document.getElementById('barcode-type');
+      const barcodeValue = document.getElementById('barcode-value');
+      const itemImage = document.getElementById('itemImage');
+      const itemName = document.getElementById('item-name');
+      const googleBtn = document.getElementById('google-btn');
+      const redirectBtn = document.getElementById('redirect-btn');
+      const dismissBtn = document.getElementById('dismiss-btn');
+      const reloadButton = document.getElementById('reload-button');
+
+      const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-kW76mbuh3ZZWe7ZB3kIkgVTYmsMJ7uluEcknSpxlCE3vKwMhoE8roTTAVhe3jmX/exec';
 
       // Function to start the barcode scanner
       async function startBarcodeScanner() {
@@ -246,7 +260,7 @@
       reloadButton.onclick = () => {
         window.location.reload();
       };
-    };
+    }
   </script>
 </body>
 </html>
