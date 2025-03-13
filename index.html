@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Barcode Scanner</title>
+  <title>Barcode Scanner with Scanbot SDK</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <style>
     body {
@@ -28,7 +28,7 @@
       font-size: 14px;
       z-index: 10;
     }
-    #capture-button {
+    #scan-button {
       padding: 15px 30px;
       font-size: 18px;
       background: #4CAF50;
@@ -38,13 +38,6 @@
       cursor: pointer;
       z-index: 20;
       margin-bottom: 20px;
-    }
-    #photo-preview {
-      max-width: 90%;
-      max-height: 50vh;
-      border-radius: 10px;
-      margin: 10px 0;
-      display: none;
     }
     #result {
       position: fixed;
@@ -105,22 +98,16 @@
       background: #ccc;
       color: black;
     }
-    #retry-button {
+    #reload-button {
       background: #ff9800;
       color: white;
       margin-top: 10px;
     }
-    #file-input {
-      display: none;
-    }
   </style>
-  <script src="https://unpkg.com/@zxing/library@0.19.2/umd/index.min.js"></script>
 </head>
 <body>
-  <div id="status">Ready to scan</div>
-  <button id="capture-button">Take Photo to Scan</button>
-  <img id="photo-preview" src="" alt="Photo Preview">
-  <input type="file" id="file-input" accept="image/*" capture="environment">
+  <div id="status">Ready to scan (1-minute session)</div>
+  <button id="scan-button">Scan Barcode</button>
   <div id="result">
     <h2>Scan Result</h2>
     <p id="barcode-type"></p>
@@ -132,125 +119,42 @@
       <button id="redirect-btn">Go to Item Page</button>
       <button id="dismiss-btn">Scan Again</button>
     </div>
+    <button id="reload-button" style="display: none;">Reload for New Session</button>
   </div>
 
+  <!-- Include the Scanbot SDK script -->
+  <script src="lib/ScanbotSDK.min.js"></script>
   <script>
     window.onload = async function() {
-      const captureButton = document.getElementById('capture-button');
-      const fileInput = document.getElementById('file-input');
-      const photoPreview = document.getElementById('photo-preview');
+      const scanButton = document.getElementById('scan-button');
+      const status = document.getElementById('status');
       const resultDiv = document.getElementById('result');
       const barcodeType = document.getElementById('barcode-type');
       const barcodeValue = document.getElementById('barcode-value');
       const itemImage = document.getElementById('itemImage');
       const itemName = document.getElementById('item-name');
-      const googleBtn = document.getElementById('google-btn');
-      const redirectBtn = document.getElementById('redirect-btn');
-      const dismissBtn = document.getElementById('dismiss-btn');
-      const status = document.getElementById('status');
+      const googleBtn = document.getElementgetting started with the Scanbot Web Barcode Scanner SDK on Windows, focusing on extracting the tarball and integrating the SDK into your GitHub Pages project (`matthewpyjama.github.io/Barcode-scanner`). Here's a detailed continuation of the process:
 
-      const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-kW76mbuh3ZZWe7ZB3kIkgVTYmsMJ7uluEcknSpxlCE3vKwMhoE8roTTAVhe3jmX/exec';
+---
 
-      let codeReader = new ZXing.BrowserMultiFormatReader();
+### Continuing from the Extraction Step
 
-      async function scanPhoto(file) {
-        try {
-          status.textContent = 'Processing photo...';
-          photoPreview.src = URL.createObjectURL(file);
-          photoPreview.style.display = 'block';
+Since you’ve already resolved the extraction issue using one of the methods (Windows Explorer, 7-Zip, or Git Bash), let’s confirm the files are correctly extracted and proceed with hosting them on GitHub Pages and testing the integration.
 
-          const hints = new Map();
-          hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-            ZXing.BarcodeFormat.EAN_13,
-            ZXing.BarcodeFormat.UPC_A,
-            ZXing.BarcodeFormat.CODE_128,
-            ZXing.BarcodeFormat.QR_CODE
-          ]);
-          hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+#### Verify the Extracted Files
+- After extracting `scanbot-web-sdk-7.0.2.tgz`, you should have a `package` folder in `C:\Users\matth`.
+- Inside `package`, confirm the presence of:
+  - `bundle/ScanbotSDK.min.js` (the main SDK script).
+  - `bundle/bin/barcode-scanner/` (contains engine files like `ScanbotSDK.Asm.wasm`).
 
-          const result = await codeReader.decodeFromImage(photoPreview, hints);
-          const barcode = result.text;
-          let format = result.format.replace('ZXing.', '');
-          console.log(`[DEBUG] Detected barcode: ${barcode}, format: ${format}`);
-          status.textContent = `Scanned barcode: ${barcode}`;
-
-          try {
-            status.textContent = 'Fetching item data...';
-            console.log(`[DEBUG] Fetching data for barcode: ${barcode}`);
-            const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`);
-            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-            const data = await response.json();
-            console.log(`[DEBUG] Fetch response:`, data);
-
-            barcodeType.textContent = `Type: ${format}`;
-            barcodeValue.textContent = `Value: ${barcode}`;
-            if (data.error || !data.itemName) {
-              itemName.textContent = 'Item not found';
-              itemImage.style.display = 'none';
-            } else {
-              itemName.textContent = `Item: ${data.itemName}`;
-              if (data.imageUrl) {
-                itemImage.src = data.imageUrl;
-                itemImage.style.display = 'block';
-              } else {
-                itemImage.style.display = 'none';
-              }
-            }
-            resultDiv.style.display = 'block';
-            photoPreview.style.display = 'none';
-            status.style.display = 'none';
-          } catch (fetchErr) {
-            console.error('Fetch error:', fetchErr);
-            status.textContent = `Error: ${fetchErr.message}`;
-            setTimeout(() => {
-              resultDiv.style.display = 'block';
-              barcodeType.textContent = 'Error';
-              barcodeValue.textContent = `Error fetching item: ${fetchErr.message}`;
-              itemImage.style.display = 'none';
-              photoPreview.style.display = 'none';
-              status.style.display = 'none';
-            }, 5000);
-          }
-
-          googleBtn.onclick = () => {
-            window.open(`https://www.google.com/search?q=${barcode}`, '_blank');
-          };
-
-          redirectBtn.onclick = () => {
-            const itemPage = `item.html?code=${barcode}&name=${encodeURIComponent(data.itemName || 'Not Found')}&image=${encodeURIComponent(data.imageUrl || '')}`;
-            window.location.href = itemPage;
-          };
-
-          dismissBtn.onclick = () => {
-            codeReader = new ZXing.BrowserMultiFormatReader();
-            resultDiv.style.display = 'none';
-            photoPreview.style.display = 'none';
-            status.style.display = 'block';
-            status.textContent = 'Ready to scan';
-          };
-        } catch (err) {
-          console.error('Decoding error:', err);
-          status.textContent = `Error decoding barcode: ${err.message}. Please retake with a clear image.`;
-          // Keep photo preview visible for user to check
-          // Add retry button or delay reset
-          setTimeout(() => {
-            status.textContent = 'Ready to scan';
-            // photoPreview.style.display = 'none'; // Uncomment to hide preview if desired
-          }, 5000);
-        }
-      }
-
-      captureButton.onclick = () => {
-        fileInput.click();
-      };
-
-      fileInput.onchange = (event) => {
-        const file = event.target.files[0];
-        if (file) {
-          scanPhoto(file);
-        }
-      };
-    };
-  </script>
-</body>
-</html>
+#### 1. **Host the SDK Files on GitHub Pages**
+- Create a `lib` folder in your local GitHub repository directory (e.g., `C:\Users\matth\Barcode-scanner`).
+- Copy the necessary files from the `package` folder:
+  - Copy `package/bundle/ScanbotSDK.min.js` to `lib/ScanbotSDK.min.js`.
+  - Copy the entire `package/bundle/bin/barcode-scanner/` folder to `lib/barcode-scanner/`.
+- Commit and push the changes to GitHub:
+  ```cmd
+  cd C:\Users\matth\Barcode-scanner
+  git add lib/
+  git commit -m "Add Scanbot Web SDK trial files"
+  git push origin main
