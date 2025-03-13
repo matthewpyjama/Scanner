@@ -12,40 +12,72 @@
       margin-top: 20px;
       font-size: 18px;
     }
+    #itemImage {
+      max-width: 100%;
+      height: auto;
+      margin-top: 10px;
+    }
   </style>
-  <!-- Load ZXing library from CDN -->
   <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
 </head>
 <body>
   <video id="preview" autoplay muted playsinline></video>
   <div id="result"></div>
+  <img id="itemImage" src="" alt="" style="display: none;">
 
   <script>
     window.onload = async function() {
       const video = document.getElementById('preview');
       const resultDiv = document.getElementById('result');
+      const itemImage = document.getElementById('itemImage');
 
-      // Initialize ZXing code reader
+      // Replace with your Google Apps Script Web App URL
+      const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz123.../exec'; // UPDATE THIS!
+
       const codeReader = new ZXing.BrowserMultiFormatReader();
 
       try {
-        // Request camera access
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' } // Prefer rear camera
+          video: { facingMode: 'environment' }
         });
         video.srcObject = stream;
 
-        // Start decoding from video stream
-        codeReader.decodeFromVideoDevice(null, 'preview', (result, err) => {
+        codeReader.decodeFromVideoDevice(null, 'preview', async (result, err) => {
           if (result) {
-            resultDiv.textContent = `Detected barcode: ${result.text}`;
-            // Optionally stop scanning after detection
+            const barcode = result.text;
+            resultDiv.textContent = `Scanned barcode: ${barcode}`;
+
+            try {
+              const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`);
+              const data = await response.json();
+
+              if (data.error) {
+                resultDiv.textContent = `No item found for barcode: ${barcode}`;
+                itemImage.style.display = 'none';
+              } else {
+                resultDiv.textContent = `Item: ${data.itemName} (Barcode: ${barcode})`;
+                if (data.imageUrl) {
+                  itemImage.src = data.imageUrl;
+                  itemImage.style.display = 'block';
+                } else {
+                  itemImage.style.display = 'none';
+                }
+              }
+            } catch (fetchErr) {
+              console.error('Fetch error:', fetchErr);
+              resultDiv.textContent = `Error fetching item: ${fetchErr.message}`;
+              itemImage.style.display = 'none';
+            }
+
+            // Uncomment to stop scanning after detection
             // codeReader.reset();
           } else if (err && !(err instanceof ZXing.NotFoundException)) {
             console.error('Decoding error:', err);
             resultDiv.textContent = 'Error decoding barcode';
+            itemImage.style.display = 'none';
           } else {
             resultDiv.textContent = 'No barcode detected';
+            itemImage.style.display = 'none';
           }
         });
 
@@ -54,7 +86,6 @@
         resultDiv.textContent = 'Error accessing camera: ' + err.message;
       }
 
-      // Clean up on page unload
       window.onunload = () => {
         codeReader.reset();
         if (video.srcObject) {
