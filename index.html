@@ -198,25 +198,23 @@
             return;
           }
 
+          // Enumerate devices for debugging
           const devices = await navigator.mediaDevices.enumerateDevices();
           const videoDevices = devices.filter(device => device.kind === 'videoinput');
-          const rearCamera = videoDevices.find(device => device.label.toLowerCase().includes('rear') || device.label.toLowerCase().includes('back'));
-
-          if (!rearCamera) {
-            status.textContent = 'No rear camera found.';
-            return;
-          }
-
-          console.log(`[DEBUG] Using camera: ${rearCamera.label}, deviceId: ${rearCamera.deviceId}`);
+          console.log('[DEBUG] Available video devices:', videoDevices.map(device => ({
+            deviceId: device.deviceId,
+            label: device.label
+          })));
 
           const isMobile = /Mobi|Android/i.test(navigator.userAgent);
           const resolution = isMobile
             ? { width: { ideal: 640 }, height: { ideal: 480 } }
             : { width: { ideal: 1280 }, height: { ideal: 720 } };
 
+          // Try to use the rear camera with facingMode
           const constraints = {
             video: {
-              deviceId: { exact: rearCamera.deviceId },
+              facingMode: 'environment',
               ...resolution,
               focusMode: 'continuous',
               advanced: [{ torch: false }]
@@ -231,7 +229,11 @@
           startButton.style.display = 'none';
           captureButton.style.display = 'block';
 
+          // Log the selected camera
           const track = stream.getVideoTracks()[0];
+          console.log(`[DEBUG] Selected camera: ${track.label}, constraints:`, track.getConstraints());
+
+          // Apply focus
           if (track.getCapabilities().focusMode) {
             track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
               .catch(err => console.warn('Focus not supported:', err));
