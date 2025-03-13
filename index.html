@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Barcode Scanner</title>
+  <style>
+    video {
+      width: 100%;
+      max-width: 640px;
+      height: auto;
+    }
+    #result {
+      margin-top: 20px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <video id="preview" autoplay muted playsinline></video>
+  <div id="result"></div>
+
+  <script>
+    window.onload = async function() {
+      // Check if BarcodeDetector is supported
+      if (!('BarcodeDetector' in window)) {
+        document.getElementById('result').textContent = 
+          'Barcode Detector is not supported by this browser.';
+        return;
+      }
+
+      const video = document.getElementById('preview');
+      const resultDiv = document.getElementById('result');
+
+      try {
+        // Request camera access
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' } // Prefer rear camera
+        });
+        video.srcObject = stream;
+
+        // Create barcode detector
+        const barcodeDetector = new BarcodeDetector({
+          formats: [
+            'qr_code',
+            'upc_a',
+            'upc_e',
+            'ean_13',
+            'ean_8',
+            'code_39',
+            'code_128',
+            'itf',
+            'codabar',
+            'data_matrix'
+          ]
+        });
+
+        // Continuous scanning
+        async function scanBarcode() {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          try {
+            const barcodes = await barcodeDetector.detect(canvas);
+            if (barcodes.length > 0) {
+              resultDiv.textContent = `Detected barcode: ${barcodes[0].rawValue}`;
+            } else {
+              resultDiv.textContent = 'No barcode detected';
+            }
+          } catch (err) {
+            console.error('Detection error:', err);
+            resultDiv.textContent = 'Error detecting barcode';
+          }
+
+          // Continue scanning
+          requestAnimationFrame(scanBarcode);
+        }
+
+        // Start scanning when video is ready
+        video.onloadedmetadata = () => {
+          video.play();
+          scanBarcode();
+        };
+
+      } catch (err) {
+        console.error('Camera error:', err);
+        resultDiv.textContent = 'Error accessing camera: ' + err.message;
+      }
+    };
+  </script>
+</body>
+</html>
