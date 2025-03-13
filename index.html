@@ -143,10 +143,10 @@
       async function initializeScanbot() {
         try {
           console.log('[DEBUG] Checking if ScanbotSDK is available...');
-          const ScanbotSDK = window.ScanbotSDK;
-          if (!ScanbotSDK) {
-            throw new Error('Scanbot SDK not loaded. Check if lib/ScanbotSDK.min.js is accessible.');
-          }
+          const scanbotSDK = await ScanbotSDK.initialize({
+  licenseKey: '',
+  enginePath: '/lib/'
+});
           console.log('[DEBUG] ScanbotSDK object:', ScanbotSDK);
           console.log('[DEBUG] Initializing SDK with enginePath: lib/');
           const scanbotSDK = await ScanbotSDK.initialize({
