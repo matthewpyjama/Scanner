@@ -134,73 +134,62 @@
       const itemImage = document.getElementById('itemImage');
       const itemName = document.getElementById('item-name');
       const googleBtn = document.getElementById('google-btn');
-      const redirectBtn = document.getElementAById('redirect-btn');
+      const redirectBtn = document.getElementById('redirect-btn');
       const dismissBtn = document.getElementById('dismiss-btn');
       const reloadButton = document.getElementById('reload-button');
 
       const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-kW76mbuh3ZZWe7ZB3kIkgVTYmsMJ7uluEcknSpxlCE3vKwMhoE8roTTAVhe3jmX/exec';
 
-      async function initializeScanbot() {
-        try {
-          console.log('[DEBUG] Checking if ScanbotSDK is available...');
-          const ScanbotSDK = window.ScanbotSDK;
-          if (!ScanbotSDK) {
-            console.error('[DEBUG] ScanbotSDK is undefined. Check if lib/ScanbotSDK.min.js loaded correctly.');
-            throw new Error('Scanbot SDK not loaded. Check if lib/ScanbotSDK.min.js is accessible.');
-          }
-          console.log('[DEBUG] ScanbotSDK object:', ScanbotSDK);
-          console.log('[DEBUG] Initializing SDK with enginePath: /lib/');
-          const scanbotSDK = await ScanbotSDK.initialize({
-            licenseKey: '', // Empty for trial mode
-            enginePath: '/lib/' // Absolute path to engine files
-          });
-          console.log('[DEBUG] SDK initialized successfully:', scanbotSDK);
-          if (!scanbotSDK) {
-            throw new Error('ScanbotSDK.initialize returned undefined.');
-          }
-          return scanbotSDK;
-        } catch (err) {
-          console.error('[DEBUG] Scanbot initialization error:', err.message, err.stack);
-          status.textContent = `Error: ${err.message}. Please reload and try again.`;
-          return null;
-        }
+      let scanbotSDK = null;
+
+      try {
+        console.log('[DEBUG] Initializing Scanbot SDK...');
+        scanbotSDK = await ScanbotSDK.initialize({
+          licenseKey: '', // Empty for trial mode
+          enginePath: '/lib/' // Absolute path to engine files
+        });
+        console.log('[DEBUG] Scanbot SDK initialized successfully:', scanbotSDK);
+        const licenseInfo = await scanbotSDK.getLicenseInfo();
+        console.log('[DEBUG] License Info:', licenseInfo);
+      } catch (error) {
+        console.error('[DEBUG] Scanbot SDK initialization error:', error.name, error.message, error.stack);
+        status.textContent = `Initialization Error: ${error.name} - ${error.message}. Reload to try again.`;
+        reloadButton.style.display = 'block';
+        return;
       }
 
       async function startBarcodeScanner() {
-        console.log('[DEBUG] Starting barcode scanner...');
-        const sdk = await initializeScanbot();
-        if (!sdk) {
-          console.error('[DEBUG] SDK initialization failed. Cannot start scanner.');
-          status.textContent = 'Error: SDK initialization failed. Please reload and try again.';
-          return;
-        }
-        console.log('[DEBUG] SDK object before UI call:', sdk);
-        if (!sdk.UI) {
-          console.error('[DEBUG] sdk.UI is undefined. SDK might not have loaded correctly.');
-          status.textContent = 'Error: SDK UI not available. Please reload and try again.';
+        if (!scanbotSDK) {
+          console.error('[DEBUG] Scanbot SDK is not initialized.');
+          status.textContent = 'Error: SDK not initialized. Reload to try again.';
+          reloadButton.style.display = 'block';
           return;
         }
 
         try {
           status.textContent = 'Starting scanner...';
-          console.log('[DEBUG] Launching Scanbot UI...');
-          const result = await sdk.UI.startBarcodeScanner({
+          console.log('[DEBUG] Launching barcode scanner...');
+          const config = new ScanbotSDK.UI.Config.BarcodeScannerScreenConfiguration({
             barcodeFormats: ['EAN_13', 'UPC_A', 'CODE_128', 'QR_CODE'],
-            camera: {
-              preferredCamera: 'environment'
-            },
-            singleScanMode: true
+            camera: { preferredCamera: 'environment' },
+            singleScanMode: true,
+            onError: (error) => {
+              console.error('[DEBUG] Scanner runtime error:', error.name, error.message);
+              status.textContent = `Scanner Error: ${error.name} - ${error.message}. Reload to try again.`;
+              reloadButton.style.display = 'block';
+            }
           });
-          console.log('[DEBUG] Scanbot UI result:', result);
+          const result = await scanbotSDK.UI.createBarcodeScanner(config);
+          console.log('[DEBUG] Scanner result:', result);
 
-          if (result.canceled) {
+          if (result?.canceled) {
             status.textContent = 'Scan canceled.';
             return;
           }
 
-          if (result.barcodes && result.barcodes.length > 0) {
-            const barcode = result.barcodes[0].text;
-            const format = result.barcodes[0].format;
+          if (result?.items && result.items.length > 0) {
+            const barcode = result.items[0].barcode.text;
+            const format = result.items[0].barcode.format;
             console.log(`[DEBUG] Detected barcode: ${barcode}, format: ${format}`);
             status.textContent = `Scanned barcode: ${barcode}`;
 
@@ -257,14 +246,10 @@
           } else {
             status.textContent = 'No barcode detected. Please try again.';
           }
-        } catch (err) {
-          console.error('Scanbot error:', err);
-          status.textContent = `Error: ${err.message}. Session may have expired.`;
+        } catch (error) {
+          console.error('Scanner error:', error.name, error.message, error.stack);
+          status.textContent = `Error: ${error.name} - ${error.message}. Reload to try again.`;
           reloadButton.style.display = 'block';
-          setTimeout(() => {
-            status.textContent = 'Ready to scan (1-minute session)';
-            reloadButton.style.display = 'none';
-          }, 5000);
         }
       }
 
