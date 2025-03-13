@@ -2,16 +2,21 @@
 <html>
 <head>
   <title>Barcode Scanner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <style>
     body {
       margin: 0;
+      padding: 0;
       font-family: Arial, sans-serif;
       background: #f0f0f0;
+      overflow: hidden;
     }
     .scanner-container {
-      position: relative;
+      position: fixed;
+      top: 0;
+      left: 0;
       width: 100%;
-      height: 100vh;
+      height: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -34,8 +39,9 @@
       pointer-events: none;
     }
     #scanner-finder {
-      width: 80%;
-      height: 150px;
+      width: 90%;
+      max-width: 400px;
+      height: 120px;
       border: 2px solid #ff0000;
       border-radius: 10px;
       background: rgba(0, 0, 0, 0.3);
@@ -43,16 +49,29 @@
       justify-content: center;
       align-items: center;
       color: white;
-      font-size: 18px;
+      font-size: 16px;
       text-align: center;
+      padding: 10px;
     }
     #zoom-control {
       position: absolute;
-      bottom: 20px;
+      bottom: 30px;
       left: 50%;
       transform: translateX(-50%);
       width: 80%;
       max-width: 300px;
+      -webkit-appearance: none;
+      height: 8px;
+      background: #d3d3d3;
+      border-radius: 5px;
+    }
+    #zoom-control::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #ff0000;
+      border-radius: 50%;
+      cursor: pointer;
     }
     #result-modal {
       position: fixed;
@@ -65,8 +84,11 @@
       box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
       width: 90%;
       max-width: 400px;
+      max-height: 80vh;
+      overflow-y: auto;
       display: none;
       text-align: center;
+      z-index: 1000;
     }
     #result-modal h2 {
       margin: 0 0 10px;
@@ -90,11 +112,13 @@
       margin-top: 10px;
     }
     .button-group button {
-      padding: 10px 20px;
+      padding: 12px 24px;
       font-size: 16px;
       border: none;
       border-radius: 5px;
       cursor: pointer;
+      flex: 1;
+      min-width: 120px;
     }
     #google-btn {
       background: #4285F4;
@@ -148,13 +172,19 @@
 
       async function startScanning() {
         try {
+          // Dynamically adjust resolution based on device
+          const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+          const resolution = isMobile
+            ? { width: { ideal: 1280 }, height: { ideal: 720 } } // Mobile: Higher but reasonable
+            : { width: { ideal: 1920 }, height: { ideal: 1080 } }; // Desktop: Full HD
+
           stream = await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: 'environment',
               focusMode: 'continuous',
-              width: { ideal: 1280 }, // Higher resolution for small barcodes
-              height: { ideal: 720 },
-              zoom: zoomLevel
+              ...resolution,
+              zoom: zoomLevel,
+              advanced: [{ torch: false }] // Disable torch by default
             }
           });
           video.srcObject = stream;
@@ -167,17 +197,19 @@
           zoomControl.oninput = () => {
             zoomLevel = parseFloat(zoomControl.value);
             video.style.transform = `scale(${zoomLevel})`;
-            // Attempt to set camera zoom if supported
             const track = stream.getVideoTracks()[0];
             if (track && track.getCapabilities().zoom) {
-              track.applyConstraints({ advanced: [{ zoom: zoomLevel * 10 }] });
+              track.applyConstraints({ advanced: [{ zoom: zoomLevel * 10 }] }).catch(err => {
+                console.warn('Zoom not supported:', err);
+              });
             }
           };
 
           codeReader.decodeFromVideoDevice(null, 'preview', async (result, err) => {
             if (result) {
               const barcode = result.text;
-              const format = result.format; // e.g., EAN_13
+              let format = result.format; // e.g., EAN_13
+              format = format.replace('ZXing.', ''); // Clean up format name
 
               try {
                 const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`);
