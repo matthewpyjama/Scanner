@@ -66,11 +66,11 @@
       font-size: 14px;
       z-index: 10;
     }
-    #start-button {
+    #start-button, #capture-button {
       position: absolute;
-      top: 50%;
+      bottom: 20px;
       left: 50%;
-      transform: translate(-50%, -50%);
+      transform: translateX(-50%);
       padding: 10px 20px;
       font-size: 16px;
       background: #4CAF50;
@@ -79,6 +79,10 @@
       border-radius: 5px;
       cursor: pointer;
       z-index: 20;
+    }
+    #start-button {
+      top: 50%;
+      bottom: auto;
     }
     #result {
       position: fixed;
@@ -150,6 +154,7 @@
     </div>
     <div id="status">Initializing...</div>
     <button id="start-button">Start Camera</button>
+    <button id="capture-button" style="display: none;">Capture</button>
   </div>
   <div id="result">
     <h2>Scan Result</h2>
@@ -176,13 +181,16 @@
       const redirectBtn = document.getElementById('redirect-btn');
       const dismissBtn = document.getElementById('dismiss-btn');
       const scannerOverlay = document.getElementById('scanner-overlay');
+      const scannerFinder = document.getElementById('scanner-finder');
       const status = document.getElementById('status');
       const startButton = document.getElementById('start-button');
+      const captureButton = document.getElementById('capture-button');
 
       const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-kW76mbuh3ZZWe7ZB3kIkgVTYmsMJ7uluEcknSpxlCE3vKwMhoE8roTTAVhe3jmX/exec';
 
       let codeReader = new ZXing.BrowserMultiFormatReader();
       let stream;
+      let isContinuousScanning = true;
 
       async function initializeCamera() {
         try {
@@ -215,6 +223,7 @@
           scannerOverlay.style.display = 'flex';
           status.textContent = 'Scanning...';
           startButton.style.display = 'none';
+          captureButton.style.display = 'block';
 
           const track = stream.getVideoTracks()[0];
           let focusAttempts = 0;
@@ -228,7 +237,21 @@
             }
           }, 2000);
 
-          // Add hints for better detection (e.g., prioritize EAN-13, UPC, etc.)
+          // Calculate the region of interest (ROI) based on the finder box
+          const calculateROI = () => {
+            const finderRect = scannerFinder.getBoundingClientRect();
+            const videoRect = video.getBoundingClientRect();
+            const scaleX = video.videoWidth / videoRect.width;
+            const scaleY = video.videoHeight / videoRect.height;
+
+            return {
+              x: Math.round(finderRect.left * scaleX),
+              y: Math.round(finderRect.top * scaleY),
+              width: Math.round(finderRect.width * scaleX),
+              height: Math.round(finderRect.height * scaleY)
+            };
+          };
+
           const hints = new Map();
           hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
             ZXing.BarcodeFormat.EAN_13,
@@ -239,8 +262,17 @@
           hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
           let lastStatusUpdate = Date.now();
-          codeReader.decodeFromVideoDevice(null, 'preview', async (result, err) => {
-            if (result) {
+          const scanBarcode = async (source) => {
+            try {
+              const roi = calculateROI();
+              console.log(`[DEBUG] ROI:`, roi);
+
+              const result = await codeReader.decodeFromConstraints(
+                { video: { ...roi } },
+                source,
+                hints
+              );
+
               clearInterval(focusInterval);
               const barcode = result.text;
               let format = result.format.replace('ZXing.', '');
@@ -259,6 +291,7 @@
                 video.style.display = 'none';
                 scannerOverlay.style.display = 'none';
                 status.style.display = 'none';
+                captureButton.style.display = 'none';
 
                 barcodeType.textContent = `Type: ${format}`;
                 barcodeValue.textContent = `Value: ${barcode}`;
@@ -275,6 +308,21 @@
                   }
                 }
                 resultDiv.style.display = 'block';
+
+                googleBtn.onclick = () => {
+                  window.open(`https://www.google.com/search?q=${barcode}`, '_blank');
+                };
+
+                redirectBtn.onclick = () => {
+                  const itemPage = `item.html?code=${barcode}&name=${encodeURIComponent(data.itemName || 'Not Found')}&image=${encodeURIComponent(data.imageUrl || '')}`;
+                  window.location.href = itemPage;
+                };
+
+                dismissBtn.onclick = () => {
+                  codeReader = new ZXing.BrowserMultiFormatReader();
+                  resultDiv.style.display = 'none';
+                  startScanning();
+                };
               } catch (fetchErr) {
                 console.error('Fetch error:', fetchErr);
                 status.textContent = `Error: ${fetchErr.message}`;
@@ -283,40 +331,47 @@
                   video.style.display = 'none';
                   scannerOverlay.style.display = 'none';
                   status.style.display = 'none';
+                  captureButton.style.display = 'none';
                   resultDiv.style.display = 'block';
                   barcodeType.textContent = 'Error';
                   barcodeValue.textContent = `Error fetching item: ${fetchErr.message}`;
                   itemImage.style.display = 'none';
                 }, 2000);
               }
-
-              googleBtn.onclick = () => {
-                window.open(`https://www.google.com/search?q=${barcode}`, '_blank');
-              };
-
-              redirectBtn.onclick = () => {
-                const itemPage = `item.html?code=${barcode}&name=${encodeURIComponent(data.itemName || 'Not Found')}&image=${encodeURIComponent(data.imageUrl || '')}`;
-                window.location.href = itemPage;
-              };
-
-              dismissBtn.onclick = () => {
-                codeReader = new ZXing.BrowserMultiFormatReader();
-                resultDiv.style.display = 'none';
-                startScanning();
-              };
-            } else {
-              // Update status periodically to indicate scanning is active
-              const now = Date.now();
-              if (now - lastStatusUpdate > 2000) {
-                status.textContent = 'Scanning... (No barcode detected yet)';
-                lastStatusUpdate = now;
-              }
-              if (err && !(err instanceof ZXing.NotFoundException)) {
-                console.error('Decoding error:', err);
+            } catch (err) {
+              console.error('Decoding error:', err);
+              if (!(err instanceof ZXing.NotFoundException)) {
                 status.textContent = 'Error decoding barcode';
               }
             }
-          }, hints);
+          };
+
+          // Continuous scanning
+          if (isContinuousScanning) {
+            let lastStatusUpdate = Date.now();
+            codeReader.decodeFromVideoDevice(null, 'preview', async (result, err) => {
+              if (result) {
+                await scanBarcode('preview');
+              } else {
+                const now = Date.now();
+                if (now - lastStatusUpdate > 2000) {
+                  status.textContent = 'Scanning... (No barcode detected yet)';
+                  lastStatusUpdate = now;
+                }
+                if (err && !(err instanceof ZXing.NotFoundException)) {
+                  console.error('Decoding error:', err);
+                  status.textContent = 'Error decoding barcode';
+                }
+              }
+            }, hints);
+          }
+
+          // Capture button for single frame scanning
+          captureButton.onclick = async () => {
+            isContinuousScanning = false;
+            codeReader.reset();
+            await scanBarcode('preview');
+          };
         } catch (err) {
           console.error('Camera error:', err);
           status.textContent = `Camera error: ${err.message}. Please allow camera access or try again.`;
@@ -326,6 +381,7 @@
 
       function startScanning() {
         status.textContent = 'Initializing...';
+        isContinuousScanning = true;
         initializeCamera();
       }
 
