@@ -105,11 +105,16 @@
       background: #ccc;
       color: black;
     }
+    #retry-button {
+      background: #ff9800;
+      color: white;
+      margin-top: 10px;
+    }
     #file-input {
       display: none;
     }
   </style>
-  <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+  <script src="https://unpkg.com/@zxing/library@0.19.2/umd/index.min.js"></script>
 </head>
 <body>
   <div id="status">Ready to scan</div>
@@ -204,7 +209,7 @@
               itemImage.style.display = 'none';
               photoPreview.style.display = 'none';
               status.style.display = 'none';
-            }, 2000);
+            }, 5000);
           }
 
           googleBtn.onclick = () => {
@@ -225,11 +230,13 @@
           };
         } catch (err) {
           console.error('Decoding error:', err);
-          status.textContent = `Error decoding barcode: ${err.message}`;
+          status.textContent = `Error decoding barcode: ${err.message}. Please retake with a clear image.`;
+          // Keep photo preview visible for user to check
+          // Add retry button or delay reset
           setTimeout(() => {
-            photoPreview.style.display = 'none';
             status.textContent = 'Ready to scan';
-          }, 2000);
+            // photoPreview.style.display = 'none'; // Uncomment to hide preview if desired
+          }, 5000);
         }
       }
 
