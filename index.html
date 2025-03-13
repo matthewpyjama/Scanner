@@ -181,7 +181,6 @@
       const redirectBtn = document.getElementById('redirect-btn');
       const dismissBtn = document.getElementById('dismiss-btn');
       const scannerOverlay = document.getElementById('scanner-overlay');
-      const scannerFinder = document.getElementById('scanner-finder');
       const status = document.getElementById('status');
       const startButton = document.getElementById('start-button');
       const captureButton = document.getElementById('capture-button');
@@ -203,6 +202,13 @@
           const videoDevices = devices.filter(device => device.kind === 'videoinput');
           const rearCamera = videoDevices.find(device => device.label.toLowerCase().includes('rear') || device.label.toLowerCase().includes('back'));
 
+          if (!rearCamera) {
+            status.textContent = 'No rear camera found.';
+            return;
+          }
+
+          console.log(`[DEBUG] Using camera: ${rearCamera.label}, deviceId: ${rearCamera.deviceId}`);
+
           const isMobile = /Mobi|Android/i.test(navigator.userAgent);
           const resolution = isMobile
             ? { width: { ideal: 640 }, height: { ideal: 480 } }
@@ -210,9 +216,9 @@
 
           const constraints = {
             video: {
-              facingMode: rearCamera ? { exact: 'environment' } : 'environment',
+              deviceId: { exact: rearCamera.deviceId },
               ...resolution,
-              deviceId: rearCamera ? { exact: rearCamera.deviceId } : undefined,
+              focusMode: 'continuous',
               advanced: [{ torch: false }]
             }
           };
@@ -226,31 +232,10 @@
           captureButton.style.display = 'block';
 
           const track = stream.getVideoTracks()[0];
-          let focusAttempts = 0;
-          const maxFocusAttempts = 3;
-
-          const focusInterval = setInterval(() => {
-            if (track && track.getCapabilities().focusMode && focusAttempts < maxFocusAttempts) {
-              track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
-                .catch(err => console.warn('Focus not supported:', err));
-              focusAttempts++;
-            }
-          }, 2000);
-
-          // Calculate the region of interest (ROI) based on the finder box
-          const calculateROI = () => {
-            const finderRect = scannerFinder.getBoundingClientRect();
-            const videoRect = video.getBoundingClientRect();
-            const scaleX = video.videoWidth / videoRect.width;
-            const scaleY = video.videoHeight / videoRect.height;
-
-            return {
-              x: Math.round(finderRect.left * scaleX),
-              y: Math.round(finderRect.top * scaleY),
-              width: Math.round(finderRect.width * scaleX),
-              height: Math.round(finderRect.height * scaleY)
-            };
-          };
+          if (track.getCapabilities().focusMode) {
+            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
+              .catch(err => console.warn('Focus not supported:', err));
+          }
 
           const hints = new Map();
           hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
@@ -262,115 +247,113 @@
           hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
           let lastStatusUpdate = Date.now();
-          const scanBarcode = async (source) => {
+          const scanBarcode = async (source, isCapture = false) => {
             try {
-              const roi = calculateROI();
-              console.log(`[DEBUG] ROI:`, roi);
+              const result = isCapture
+                ? await codeReader.decodeFromVideoElement(video, hints)
+                : await codeReader.decodeFromVideoDevice(null, 'preview', (res, err) => {
+                    if (res) {
+                      processResult(res);
+                    } else {
+                      const now = Date.now();
+                      if (now - lastStatusUpdate > 2000) {
+                        status.textContent = 'Scanning... (No barcode detected yet)';
+                        lastStatusUpdate = now;
+                      }
+                      if (err && !(err instanceof ZXing.NotFoundException)) {
+                        console.error('Decoding error:', err);
+                        status.textContent = `Error decoding barcode: ${err.message}`;
+                      }
+                    }
+                  }, hints);
 
-              const result = await codeReader.decodeFromConstraints(
-                { video: { ...roi } },
-                source,
-                hints
-              );
+              if (result) {
+                processResult(result);
+              }
+            } catch (err) {
+              console.error('Decoding error:', err);
+              status.textContent = `Error decoding barcode: ${err.message}`;
+            }
+          };
 
-              clearInterval(focusInterval);
-              const barcode = result.text;
-              let format = result.format.replace('ZXing.', '');
-              console.log(`[DEBUG] Detected barcode: ${barcode}, format: ${format}`);
-              status.textContent = `Scanned barcode: ${barcode}`;
+          const processResult = async (result) => {
+            const barcode = result.text;
+            let format = result.format.replace('ZXing.', '');
+            console.log(`[DEBUG] Detected barcode: ${barcode}, format: ${format}`);
+            status.textContent = `Scanned barcode: ${barcode}`;
 
-              try {
-                status.textContent = 'Fetching item data...';
-                console.log(`[DEBUG] Fetching data for barcode: ${barcode}`);
-                const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`);
-                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-                const data = await response.json();
-                console.log(`[DEBUG] Fetch response:`, data);
+            try {
+              status.textContent = 'Fetching item data...';
+              console.log(`[DEBUG] Fetching data for barcode: ${barcode}`);
+              const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`);
+              if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+              const data = await response.json();
+              console.log(`[DEBUG] Fetch response:`, data);
 
+              codeReader.reset();
+              video.style.display = 'none';
+              scannerOverlay.style.display = 'none';
+              status.style.display = 'none';
+              captureButton.style.display = 'none';
+
+              barcodeType.textContent = `Type: ${format}`;
+              barcodeValue.textContent = `Value: ${barcode}`;
+              if (data.error || !data.itemName) {
+                itemName.textContent = 'Item not found';
+                itemImage.style.display = 'none';
+              } else {
+                itemName.textContent = `Item: ${data.itemName}`;
+                if (data.imageUrl) {
+                  itemImage.src = data.imageUrl;
+                  itemImage.style.display = 'block';
+                } else {
+                  itemImage.style.display = 'none';
+                }
+              }
+              resultDiv.style.display = 'block';
+
+              googleBtn.onclick = () => {
+                window.open(`https://www.google.com/search?q=${barcode}`, '_blank');
+              };
+
+              redirectBtn.onclick = () => {
+                const itemPage = `item.html?code=${barcode}&name=${encodeURIComponent(data.itemName || 'Not Found')}&image=${encodeURIComponent(data.imageUrl || '')}`;
+                window.location.href = itemPage;
+              };
+
+              dismissBtn.onclick = () => {
+                codeReader = new ZXing.BrowserMultiFormatReader();
+                resultDiv.style.display = 'none';
+                startScanning();
+              };
+            } catch (fetchErr) {
+              console.error('Fetch error:', fetchErr);
+              status.textContent = `Error: ${fetchErr.message}`;
+              setTimeout(() => {
                 codeReader.reset();
                 video.style.display = 'none';
                 scannerOverlay.style.display = 'none';
                 status.style.display = 'none';
                 captureButton.style.display = 'none';
-
-                barcodeType.textContent = `Type: ${format}`;
-                barcodeValue.textContent = `Value: ${barcode}`;
-                if (data.error || !data.itemName) {
-                  itemName.textContent = 'Item not found';
-                  itemImage.style.display = 'none';
-                } else {
-                  itemName.textContent = `Item: ${data.itemName}`;
-                  if (data.imageUrl) {
-                    itemImage.src = data.imageUrl;
-                    itemImage.style.display = 'block';
-                  } else {
-                    itemImage.style.display = 'none';
-                  }
-                }
                 resultDiv.style.display = 'block';
-
-                googleBtn.onclick = () => {
-                  window.open(`https://www.google.com/search?q=${barcode}`, '_blank');
-                };
-
-                redirectBtn.onclick = () => {
-                  const itemPage = `item.html?code=${barcode}&name=${encodeURIComponent(data.itemName || 'Not Found')}&image=${encodeURIComponent(data.imageUrl || '')}`;
-                  window.location.href = itemPage;
-                };
-
-                dismissBtn.onclick = () => {
-                  codeReader = new ZXing.BrowserMultiFormatReader();
-                  resultDiv.style.display = 'none';
-                  startScanning();
-                };
-              } catch (fetchErr) {
-                console.error('Fetch error:', fetchErr);
-                status.textContent = `Error: ${fetchErr.message}`;
-                setTimeout(() => {
-                  codeReader.reset();
-                  video.style.display = 'none';
-                  scannerOverlay.style.display = 'none';
-                  status.style.display = 'none';
-                  captureButton.style.display = 'none';
-                  resultDiv.style.display = 'block';
-                  barcodeType.textContent = 'Error';
-                  barcodeValue.textContent = `Error fetching item: ${fetchErr.message}`;
-                  itemImage.style.display = 'none';
-                }, 2000);
-              }
-            } catch (err) {
-              console.error('Decoding error:', err);
-              if (!(err instanceof ZXing.NotFoundException)) {
-                status.textContent = 'Error decoding barcode';
-              }
+                barcodeType.textContent = 'Error';
+                barcodeValue.textContent = `Error fetching item: ${fetchErr.message}`;
+                itemImage.style.display = 'none';
+              }, 2000);
             }
           };
 
           // Continuous scanning
           if (isContinuousScanning) {
-            let lastStatusUpdate = Date.now();
-            codeReader.decodeFromVideoDevice(null, 'preview', async (result, err) => {
-              if (result) {
-                await scanBarcode('preview');
-              } else {
-                const now = Date.now();
-                if (now - lastStatusUpdate > 2000) {
-                  status.textContent = 'Scanning... (No barcode detected yet)';
-                  lastStatusUpdate = now;
-                }
-                if (err && !(err instanceof ZXing.NotFoundException)) {
-                  console.error('Decoding error:', err);
-                  status.textContent = 'Error decoding barcode';
-                }
-              }
-            }, hints);
+            scanBarcode('preview');
           }
 
           // Capture button for single frame scanning
           captureButton.onclick = async () => {
             isContinuousScanning = false;
             codeReader.reset();
-            await scanBarcode('preview');
+            status.textContent = 'Capturing...';
+            await scanBarcode('preview', true);
           };
         } catch (err) {
           console.error('Camera error:', err);
