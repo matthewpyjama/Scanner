@@ -40,9 +40,9 @@
       pointer-events: none;
     }
     #scanner-finder {
-      width: 90%;
-      max-width: 400px;
-      height: 120px;
+      width: 80%;
+      max-width: 300px;
+      height: 100px;
       border: 2px solid #ff0000;
       border-radius: 10px;
       background: rgba(0, 0, 0, 0.3);
@@ -50,7 +50,7 @@
       justify-content: center;
       align-items: center;
       color: white;
-      font-size: 16px;
+      font-size: 14px;
       text-align: center;
       padding: 10px;
     }
@@ -80,7 +80,7 @@
       cursor: pointer;
       z-index: 20;
     }
-    #result-modal {
+    #result {
       position: fixed;
       top: 50%;
       left: 50%;
@@ -97,15 +97,15 @@
       text-align: center;
       z-index: 1000;
     }
-    #result-modal h2 {
+    #result h2 {
       margin: 0 0 10px;
       font-size: 20px;
     }
-    #result-modal p {
+    #result p {
       margin: 5px 0;
       font-size: 16px;
     }
-    #result-modal img {
+    #result img {
       max-width: 100%;
       height: auto;
       border-radius: 5px;
@@ -146,13 +146,13 @@
   <div class="scanner-container">
     <video id="preview" autoplay muted playsinline></video>
     <div id="scanner-overlay">
-      <div id="scanner-finder">Move the finder over a barcode</div>
+      <div id="scanner-finder">Align barcode in this area</div>
     </div>
     <div id="status">Initializing...</div>
     <button id="start-button">Start Camera</button>
   </div>
-  <div id="result-modal">
-    <h2>Barcode Details</h2>
+  <div id="result">
+    <h2>Scan Result</h2>
     <p id="barcode-type"></p>
     <p id="barcode-value"></p>
     <img id="itemImage" src="" alt="" style="display: none;">
@@ -160,14 +160,14 @@
     <div class="button-group">
       <button id="google-btn">Google the code</button>
       <button id="redirect-btn">Go to Item Page</button>
-      <button id="dismiss-btn">Dismiss</button>
+      <button id="dismiss-btn">Scan Again</button>
     </div>
   </div>
 
   <script>
     window.onload = async function() {
       const video = document.getElementById('preview');
-      const resultModal = document.getElementById('result-modal');
+      const resultDiv = document.getElementById('result');
       const barcodeType = document.getElementById('barcode-type');
       const barcodeValue = document.getElementById('barcode-value');
       const itemImage = document.getElementById('itemImage');
@@ -228,18 +228,32 @@
             }
           }, 2000);
 
+          // Add hints for better detection (e.g., prioritize EAN-13, UPC, etc.)
+          const hints = new Map();
+          hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+            ZXing.BarcodeFormat.EAN_13,
+            ZXing.BarcodeFormat.UPC_A,
+            ZXing.BarcodeFormat.CODE_128,
+            ZXing.BarcodeFormat.QR_CODE
+          ]);
+          hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+          let lastStatusUpdate = Date.now();
           codeReader.decodeFromVideoDevice(null, 'preview', async (result, err) => {
             if (result) {
               clearInterval(focusInterval);
               const barcode = result.text;
               let format = result.format.replace('ZXing.', '');
+              console.log(`[DEBUG] Detected barcode: ${barcode}, format: ${format}`);
               status.textContent = `Scanned barcode: ${barcode}`;
 
               try {
                 status.textContent = 'Fetching item data...';
+                console.log(`[DEBUG] Fetching data for barcode: ${barcode}`);
                 const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`);
                 if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
                 const data = await response.json();
+                console.log(`[DEBUG] Fetch response:`, data);
 
                 codeReader.reset();
                 video.style.display = 'none';
@@ -260,22 +274,7 @@
                     itemImage.style.display = 'none';
                   }
                 }
-                resultModal.style.display = 'block';
-
-                googleBtn.onclick = () => {
-                  window.open(`https://www.google.com/search?q=${barcode}`, '_blank');
-                };
-
-                redirectBtn.onclick = () => {
-                  const itemPage = `item.html?code=${barcode}&name=${encodeURIComponent(data.itemName || 'Not Found')}&image=${encodeURIComponent(data.imageUrl || '')}`;
-                  window.location.href = itemPage;
-                };
-
-                dismissBtn.onclick = () => {
-                  codeReader = new ZXing.BrowserMultiFormatReader();
-                  resultModal.style.display = 'none';
-                  startScanning();
-                };
+                resultDiv.style.display = 'block';
               } catch (fetchErr) {
                 console.error('Fetch error:', fetchErr);
                 status.textContent = `Error: ${fetchErr.message}`;
@@ -284,17 +283,40 @@
                   video.style.display = 'none';
                   scannerOverlay.style.display = 'none';
                   status.style.display = 'none';
-                  resultModal.style.display = 'block';
+                  resultDiv.style.display = 'block';
                   barcodeType.textContent = 'Error';
                   barcodeValue.textContent = `Error fetching item: ${fetchErr.message}`;
                   itemImage.style.display = 'none';
                 }, 2000);
               }
-            } else if (err && !(err instanceof ZXing.NotFoundException)) {
-              console.error('Decoding error:', err);
-              status.textContent = 'Error decoding barcode';
+
+              googleBtn.onclick = () => {
+                window.open(`https://www.google.com/search?q=${barcode}`, '_blank');
+              };
+
+              redirectBtn.onclick = () => {
+                const itemPage = `item.html?code=${barcode}&name=${encodeURIComponent(data.itemName || 'Not Found')}&image=${encodeURIComponent(data.imageUrl || '')}`;
+                window.location.href = itemPage;
+              };
+
+              dismissBtn.onclick = () => {
+                codeReader = new ZXing.BrowserMultiFormatReader();
+                resultDiv.style.display = 'none';
+                startScanning();
+              };
+            } else {
+              // Update status periodically to indicate scanning is active
+              const now = Date.now();
+              if (now - lastStatusUpdate > 2000) {
+                status.textContent = 'Scanning... (No barcode detected yet)';
+                lastStatusUpdate = now;
+              }
+              if (err && !(err instanceof ZXing.NotFoundException)) {
+                console.error('Decoding error:', err);
+                status.textContent = 'Error decoding barcode';
+              }
             }
-          });
+          }, hints);
         } catch (err) {
           console.error('Camera error:', err);
           status.textContent = `Camera error: ${err.message}. Please allow camera access or try again.`;
