@@ -1,160 +1,141 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Barcode Scanner with Scanbot SDK</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: Arial, sans-serif;
-      background: #f0f0f0;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-    }
-    #status {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      padding: 5px 10px;
-      border-radius: 5px;
-      font-size: 14px;
-      z-index: 10;
-    }
-    #scan-button {
-      padding: 15px 30px;
-      font-size: 18px;
-      background: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      z-index: 20;
-      margin-bottom: 20px;
-    }
-    #result {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-      width: 90%;
-      max-width: 400px;
-      max-height: 80vh;
-      overflow-y: auto;
-      display: none;
-      text-align: center;
-      z-index: 1000;
-    }
-    #result h2 {
-      margin: 0 0 10px;
-      font-size: 20px;
-    }
-    #result p {
-      margin: 5px 0;
-      font-size: 16px;
-    }
-    #result img {
-      max-width: 100%;
-      height: auto;
-      border-radius: 5px;
-      margin: 10px 0;
-    }
-    .button-group {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 10px;
-      margin-top: 10px;
-    }
-    .button-group button {
-      padding: 12px 24px;
-      font-size: 16px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      flex: 1;
-      min-width: 120px;
-    }
-    #google-btn {
-      background: #4285F4;
-      color: white;
-    }
-    #redirect-btn {
-      background: #4CAF50;
-      color: white;
-    }
-    #dismiss-btn {
-      background: #ccc;
-      color: black;
-    }
-    #reload-button {
-      background: #ff9800;
-      color: white;
-      margin-top: 10px;
-    }
-  </style>
-</head>
-<body>
-  <div id="status">Ready to scan (1-minute session)</div>
-  <button id="scan-button">Scan Barcode</button>
-  <div id="result">
-    <h2>Scan Result</h2>
-    <p id="barcode-type"></p>
-    <p id="barcode-value"></p>
-    <img id="itemImage" src="" alt="" style="display: none;">
-    <p id="item-name"></p>
-    <div class="button-group">
-      <button id="google-btn">Google the code</button>
-      <button id="redirect-btn">Go to Item Page</button>
-      <button id="dismiss-btn">Scan Again</button>
-    </div>
-    <button id="reload-button" style="display: none;">Reload for New Session</button>
-  </div>
+<script>
+  window.onload = async function() {
+    const scanButton = document.getElementById('scan-button');
+    const status = document.getElementById('status');
+    const resultDiv = document.getElementById('result');
+    const barcodeType = document.getElementById('barcode-type');
+    const barcodeValue = document.getElementById('barcode-value');
+    const itemImage = document.getElementById('itemImage');
+    const itemName = document.getElementById('item-name');
+    const googleBtn = document.getElementById('google-btn');
+    const redirectBtn = document.getElementById('redirect-btn');
+    const dismissBtn = document.getElementById('dismiss-btn');
+    const reloadButton = document.getElementById('reload-button');
 
-  <!-- Include the Scanbot SDK script -->
-  <script src="lib/ScanbotSDK.min.js"></script>
-  <script>
-    window.onload = async function() {
-      const scanButton = document.getElementById('scan-button');
-      const status = document.getElementById('status');
-      const resultDiv = document.getElementById('result');
-      const barcodeType = document.getElementById('barcode-type');
-      const barcodeValue = document.getElementById('barcode-value');
-      const itemImage = document.getElementById('itemImage');
-      const itemName = document.getElementById('item-name');
-      const googleBtn = document.getElementgetting started with the Scanbot Web Barcode Scanner SDK on Windows, focusing on extracting the tarball and integrating the SDK into your GitHub Pages project (`matthewpyjama.github.io/Barcode-scanner`). Here's a detailed continuation of the process:
+    const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-kW76mbuh3ZZWe7ZB3kIkgVTYmsMJ7uluEcknSpxlCE3vKwMhoE8roTTAVhe3jmX/exec';
 
----
+    async function initializeScanbot() {
+      try {
+        console.log('[DEBUG] Checking if ScanbotSDK is available...');
+        const ScanbotSDK = window.ScanbotSDK;
+        if (!ScanbotSDK) {
+          throw new Error('Scanbot SDK not loaded. Please ensure the script and engine files are included correctly.');
+        }
+        console.log('[DEBUG] ScanbotSDK found. Initializing SDK...');
+        const scanbotSDK = await ScanbotSDK.initialize({
+          licenseKey: '', // Empty for trial mode
+          engine: {
+            barcode: 'lib/' // Updated path to point directly to lib/
+          }
+        });
+        console.log('[DEBUG] SDK initialized successfully:', scanbotSDK);
+        return scanbotSDK;
+      } catch (err) {
+        console.error('Scanbot initialization error:', err);
+        status.textContent = `Error: ${err.message}. Please reload and try again.`;
+        return null;
+      }
+    }
 
-### Continuing from the Extraction Step
+    async function startBarcodeScanner() {
+      console.log('[DEBUG] Starting barcode scanner...');
+      const sdk = await initializeScanbot();
+      if (!sdk) {
+        console.log('[DEBUG] SDK initialization failed. Cannot start scanner.');
+        return;
+      }
 
-Since you’ve already resolved the extraction issue using one of the methods (Windows Explorer, 7-Zip, or Git Bash), let’s confirm the files are correctly extracted and proceed with hosting them on GitHub Pages and testing the integration.
+      try {
+        status.textContent = 'Starting scanner...';
+        console.log('[DEBUG] Launching Scanbot UI...');
+        const result = await sdk.UI.startBarcodeScanner({
+          barcodeFormats: ['EAN_13', 'UPC_A', 'CODE_128', 'QR_CODE'],
+          camera: {
+            preferredCamera: 'environment'
+          },
+          singleScanMode: true
+        });
+        console.log('[DEBUG] Scanbot UI result:', result);
 
-#### Verify the Extracted Files
-- After extracting `scanbot-web-sdk-7.0.2.tgz`, you should have a `package` folder in `C:\Users\matth`.
-- Inside `package`, confirm the presence of:
-  - `bundle/ScanbotSDK.min.js` (the main SDK script).
-  - `bundle/bin/barcode-scanner/` (contains engine files like `ScanbotSDK.Asm.wasm`).
+        if (result.canceled) {
+          status.textContent = 'Scan canceled.';
+          return;
+        }
 
-#### 1. **Host the SDK Files on GitHub Pages**
-- Create a `lib` folder in your local GitHub repository directory (e.g., `C:\Users\matth\Barcode-scanner`).
-- Copy the necessary files from the `package` folder:
-  - Copy `package/bundle/ScanbotSDK.min.js` to `lib/ScanbotSDK.min.js`.
-  - Copy the entire `package/bundle/bin/barcode-scanner/` folder to `lib/barcode-scanner/`.
-- Commit and push the changes to GitHub:
-  ```cmd
-  cd C:\Users\matth\Barcode-scanner
-  git add lib/
-  git commit -m "Add Scanbot Web SDK trial files"
-  git push origin main
+        if (result.barcodes && result.barcodes.length > 0) {
+          const barcode = result.barcodes[0].text;
+          const format = result.barcodes[0].format;
+          console.log(`[DEBUG] Detected barcode: ${barcode}, format: ${format}`);
+          status.textContent = `Scanned barcode: ${barcode}`;
+
+          try {
+            status.textContent = 'Fetching item data...';
+            console.log(`[DEBUG] Fetching data for barcode: ${barcode}`);
+            const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`);
+            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+            const data = await response.json();
+            console.log(`[DEBUG] Fetch response:`, data);
+
+            barcodeType.textContent = `Type: ${format}`;
+            barcodeValue.textContent = `Value: ${barcode}`;
+            if (data.error || !data.itemName) {
+              itemName.textContent = 'Item not found';
+              itemImage.style.display = 'none';
+            } else {
+              itemName.textContent = `Item: ${data.itemName}`;
+              if (data.imageUrl) {
+                itemImage.src = data.imageUrl;
+                itemImage.style.display = 'block';
+              } else {
+                itemImage.style.display = 'none';
+              }
+            }
+            resultDiv.style.display = 'block';
+            status.style.display = 'none';
+          } catch (fetchErr) {
+            console.error('Fetch error:', fetchErr);
+            status.textContent = `Error: ${fetchErr.message}`;
+            setTimeout(() => {
+              resultDiv.style.display = 'block';
+              barcodeType.textContent = 'Error';
+              barcodeValue.textContent = `Error fetching item: ${fetchErr.message}`;
+              itemImage.style.display = 'none';
+              status.style.display = 'none';
+            }, 5000);
+          }
+
+          googleBtn.onclick = () => {
+            window.open(`https://www.google.com/search?q=${barcode}`, '_blank');
+          };
+
+          redirectBtn.onclick = () => {
+            const itemPage = `item.html?code=${barcode}&name=${encodeURIComponent(data.itemName || 'Not Found')}&image=${encodeURIComponent(data.imageUrl || '')}`;
+            window.location.href = itemPage;
+          };
+
+          dismissBtn.onclick = () => {
+            resultDiv.style.display = 'none';
+            status.style.display = 'block';
+            status.textContent = 'Ready to scan (1-minute session)';
+          };
+        } else {
+          status.textContent = 'No barcode detected. Please try again.';
+        }
+      } catch (err) {
+        console.error('Scanbot error:', err);
+        status.textContent = `Error: ${err.message}. Session may have expired.`;
+        reloadButton.style.display = 'block';
+        setTimeout(() => {
+          status.textContent = 'Ready to scan (1-minute session)';
+          reloadButton.style.display = 'none';
+        }, 5000);
+      }
+    }
+
+    scanButton.onclick = startBarcodeScanner;
+
+    reloadButton.onclick = () => {
+      window.location.reload();
+    };
+  };
+</script>
