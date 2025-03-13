@@ -150,9 +150,7 @@
           console.log('[DEBUG] ScanbotSDK found. Initializing SDK...');
           const scanbotSDK = await ScanbotSDK.initialize({
             licenseKey: '', // Empty for trial mode
-            engine: {
-              barcode: 'lib/' // Updated path to match current structure
-            }
+            enginePath: 'lib/' // Updated to use enginePath instead of engine
           });
           console.log('[DEBUG] SDK initialized successfully:', scanbotSDK);
           return scanbotSDK;
