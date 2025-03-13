@@ -122,8 +122,8 @@
     <button id="reload-button" style="display: none;">Reload for New Session</button>
   </div>
 
-  <!-- Include the Scanbot SDK script -->
-<script src="lib/ScanbotSDK.ui2.min.js"></script>
+  <!-- Include the correct SDK file with UI components -->
+  <script src="lib/ScanbotSDK.ui2.min.js"></script>
   <script>
     window.onload = async function() {
       const scanButton = document.getElementById('scan-button');
@@ -143,17 +143,17 @@
       let scanbotSDK = null;
 
       try {
-        console.log('[DEBUG] Initializing Scanbot SDK...');
+        console.log('[DEBUG] Initializing Scanbot SDK with enginePath: https://matthewpyjama.github.io/Scanner/lib/');
         scanbotSDK = await ScanbotSDK.initialize({
-  licenseKey: '', // Empty for trial mode
-  enginePath: 'https://matthewpyjama.github.io/Scanner/lib/'
-});
+          licenseKey: '', // Empty for trial mode
+          enginePath: 'https://matthewpyjama.github.io/Scanner/lib/' // Full URL to WASM files
+        });
         console.log('[DEBUG] Scanbot SDK initialized successfully:', scanbotSDK);
         const licenseInfo = await scanbotSDK.getLicenseInfo();
         console.log('[DEBUG] License Info:', licenseInfo);
       } catch (error) {
         console.error('[DEBUG] Scanbot SDK initialization error:', error.name, error.message, error.stack);
-        status.textContent = `Initialization Error: ${error.name} - ${error.message}. Reload to try again.`;
+        status.textContent = `Initialization Error: ${error.name} - ${error.message}. Check Network tab. Reload to try again.`;
         reloadButton.style.display = 'block';
         return;
       }
