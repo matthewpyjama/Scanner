@@ -3,64 +3,106 @@
 <head>
   <title>Barcode Scanner</title>
   <style>
-    /* Container for centering and layout */
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f0f0f0;
+    }
     .scanner-container {
       position: relative;
       width: 100%;
-      max-width: 640px;
-      margin: 0 auto;
-      text-align: center;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
     }
     video {
       width: 100%;
-      height: auto;
-      border: 2px solid #000;
+      height: 100%;
+      object-fit: cover;
     }
-    /* Scanbot-like overlay for barcode targeting */
     #scanner-overlay {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      pointer-events: none;
-      border: 2px dashed #00ff00; /* Green dashed border */
-      box-sizing: border-box;
       display: flex;
       justify-content: center;
       align-items: center;
+      pointer-events: none;
     }
-    #scanner-overlay::before {
-      content: "Align barcode here";
-      color: #fff;
-      background: rgba(0, 0, 0, 0.5);
-      padding: 5px 10px;
-      border-radius: 5px;
-    }
-    #result {
-      margin-top: 20px;
+    #scanner-finder {
+      width: 80%;
+      height: 150px;
+      border: 2px solid #ff0000;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.3);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
       font-size: 18px;
-      font-family: Arial, sans-serif;
+      text-align: center;
     }
-    #itemImage {
+    #zoom-control {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80%;
+      max-width: 300px;
+    }
+    #result-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      width: 90%;
+      max-width: 400px;
+      display: none;
+      text-align: center;
+    }
+    #result-modal h2 {
+      margin: 0 0 10px;
+      font-size: 20px;
+    }
+    #result-modal p {
+      margin: 5px 0;
+      font-size: 16px;
+    }
+    #result-modal img {
       max-width: 100%;
       height: auto;
-      margin-top: 10px;
       border-radius: 5px;
+      margin: 10px 0;
     }
-    #scanAgain {
-      margin-top: 20px;
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .button-group button {
       padding: 10px 20px;
       font-size: 16px;
-      background-color: #4CAF50;
-      color: white;
       border: none;
       border-radius: 5px;
       cursor: pointer;
-      display: none;
     }
-    #scanAgain:hover {
-      background-color: #45a049;
+    #google-btn {
+      background: #4285F4;
+      color: white;
+    }
+    #dismiss-btn {
+      background: #ccc;
+      color: black;
     }
   </style>
   <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
@@ -68,96 +110,132 @@
 <body>
   <div class="scanner-container">
     <video id="preview" autoplay muted playsinline></video>
-    <div id="scanner-overlay"></div>
-    <div id="result">No barcode detected</div>
+    <div id="scanner-overlay">
+      <div id="scanner-finder">Move the finder over a barcode</div>
+    </div>
+    <input type="range" id="zoom-control" min="1" max="4" step="0.1" value="1">
+  </div>
+  <div id="result-modal">
+    <h2>Barcode Details</h2>
+    <p id="barcode-type"></p>
+    <p id="barcode-value"></p>
     <img id="itemImage" src="" alt="" style="display: none;">
-    <button id="scanAgain">Scan Again</button>
+    <p id="item-name"></p>
+    <div class="button-group">
+      <button id="google-btn">Google the code</button>
+      <button id="dismiss-btn">Dismiss</button>
+    </div>
   </div>
 
   <script>
     window.onload = async function() {
       const video = document.getElementById('preview');
-      const resultDiv = document.getElementById('result');
+      const resultModal = document.getElementById('result-modal');
+      const barcodeType = document.getElementById('barcode-type');
+      const barcodeValue = document.getElementById('barcode-value');
       const itemImage = document.getElementById('itemImage');
-      const scanAgainBtn = document.getElementById('scanAgain');
-      const overlay = document.getElementById('scanner-overlay');
+      const itemName = document.getElementById('item-name');
+      const googleBtn = document.getElementById('google-btn');
+      const dismissBtn = document.getElementById('dismiss-btn');
+      const scannerOverlay = document.getElementById('scanner-overlay');
+      const zoomControl = document.getElementById('zoom-control');
 
       const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-kW76mbuh3ZZWe7ZB3kIkgVTYmsMJ7uluEcknSpxlCE3vKwMhoE8roTTAVhe3jmX/exec';
 
       let codeReader = new ZXing.BrowserMultiFormatReader();
       let stream;
+      let zoomLevel = 1;
 
       async function startScanning() {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: 'environment',
-              focusMode: 'continuous', // Scanbot-like continuous autofocus
-              width: { ideal: 640 },
-              height: { ideal: 480 }
+              focusMode: 'continuous',
+              width: { ideal: 1280 }, // Higher resolution for small barcodes
+              height: { ideal: 720 },
+              zoom: zoomLevel
             }
           });
           video.srcObject = stream;
           video.style.display = 'block';
-          overlay.style.display = 'flex';
-          resultDiv.textContent = 'No barcode detected';
-          itemImage.style.display = 'none';
-          scanAgainBtn.style.display = 'none';
+          scannerOverlay.style.display = 'flex';
+          resultModal.style.display = 'none';
+          zoomControl.style.display = 'block';
+
+          // Apply zoom
+          zoomControl.oninput = () => {
+            zoomLevel = parseFloat(zoomControl.value);
+            video.style.transform = `scale(${zoomLevel})`;
+            // Attempt to set camera zoom if supported
+            const track = stream.getVideoTracks()[0];
+            if (track && track.getCapabilities().zoom) {
+              track.applyConstraints({ advanced: [{ zoom: zoomLevel * 10 }] });
+            }
+          };
 
           codeReader.decodeFromVideoDevice(null, 'preview', async (result, err) => {
             if (result) {
               const barcode = result.text;
-              resultDiv.textContent = `Scanned barcode: ${barcode}`;
-              overlay.style.display = 'none'; // Hide overlay after detection
+              const format = result.format; // e.g., EAN_13
 
               try {
                 const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`);
                 if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
                 const data = await response.json();
 
+                // Stop scanning
+                codeReader.reset();
+                video.style.display = 'none';
+                scannerOverlay.style.display = 'none';
+                zoomControl.style.display = 'none';
+
+                // Show result modal
+                barcodeType.textContent = `Type: ${format}`;
+                barcodeValue.textContent = `Value: ${barcode}`;
                 if (data.error || !data.itemName) {
-                  resultDiv.textContent = `No item found for barcode: ${barcode}`;
+                  itemName.textContent = 'Item not found';
                   itemImage.style.display = 'none';
                 } else {
-                  resultDiv.textContent = `Item: ${data.itemName} (Barcode: ${barcode})`;
+                  itemName.textContent = `Item: ${data.itemName}`;
                   if (data.imageUrl) {
                     itemImage.src = data.imageUrl;
                     itemImage.style.display = 'block';
                   } else {
                     itemImage.style.display = 'none';
                   }
-                  // Stop scanning and update UI
-                  codeReader.reset();
-                  video.style.display = 'none';
-                  scanAgainBtn.style.display = 'block';
                 }
+                resultModal.style.display = 'block';
+
+                // Google button action
+                googleBtn.onclick = () => {
+                  window.open(`https://www.google.com/search?q=${barcode}`, '_blank');
+                };
+
+                // Dismiss button restarts scanning
+                dismissBtn.onclick = () => {
+                  codeReader = new ZXing.BrowserMultiFormatReader();
+                  startScanning();
+                };
               } catch (fetchErr) {
                 console.error('Fetch error:', fetchErr);
-                resultDiv.textContent = `Error fetching item: ${fetchErr.message}`;
+                barcodeType.textContent = 'Error';
+                barcodeValue.textContent = `Error fetching item: ${fetchErr.message}`;
                 itemImage.style.display = 'none';
-                video.style.display = 'none';
-                scanAgainBtn.style.display = 'block';
+                resultModal.style.display = 'block';
               }
             } else if (err && !(err instanceof ZXing.NotFoundException)) {
               console.error('Decoding error:', err);
-              resultDiv.textContent = 'Error decoding barcode';
-              itemImage.style.display = 'none';
             }
           });
         } catch (err) {
           console.error('Camera error:', err);
-          resultDiv.textContent = 'Error accessing camera: ' + err.message;
+          alert('Error accessing camera: ' + err.message);
         }
       }
 
       // Start scanning initially
       startScanning();
-
-      // Restart scanning on button click
-      scanAgainBtn.onclick = () => {
-        codeReader = new ZXing.BrowserMultiFormatReader();
-        startScanning();
-      };
 
       // Cleanup on unload
       window.onunload = () => {
