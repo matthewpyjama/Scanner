@@ -53,26 +53,6 @@
       text-align: center;
       padding: 10px;
     }
-    #zoom-control {
-      position: absolute;
-      bottom: 30px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 80%;
-      max-width: 300px;
-      -webkit-appearance: none;
-      height: 8px;
-      background: #d3d3d3;
-      border-radius: 5px;
-    }
-    #zoom-control::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 20px;
-      height: 20px;
-      background: #ff0000;
-      border-radius: 50%;
-      cursor: pointer;
-    }
     #result-modal {
       position: fixed;
       top: 50%;
@@ -137,7 +117,6 @@
     <div id="scanner-overlay">
       <div id="scanner-finder">Move the finder over a barcode</div>
     </div>
-    <input type="range" id="zoom-control" min="1" max="4" step="0.1" value="1">
   </div>
   <div id="result-modal">
     <h2>Barcode Details</h2>
@@ -162,54 +141,52 @@
       const googleBtn = document.getElementById('google-btn');
       const dismissBtn = document.getElementById('dismiss-btn');
       const scannerOverlay = document.getElementById('scanner-overlay');
-      const zoomControl = document.getElementById('zoom-control');
 
       const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-kW76mbuh3ZZWe7ZB3kIkgVTYmsMJ7uluEcknSpxlCE3vKwMhoE8roTTAVhe3jmX/exec';
 
       let codeReader = new ZXing.BrowserMultiFormatReader();
       let stream;
-      let zoomLevel = 1;
 
       async function startScanning() {
         try {
-          // Dynamically adjust resolution based on device
+          // Dynamically adjust resolution for mobile devices
           const isMobile = /Mobi|Android/i.test(navigator.userAgent);
           const resolution = isMobile
-            ? { width: { ideal: 1280 }, height: { ideal: 720 } } // Mobile: Higher but reasonable
-            : { width: { ideal: 1920 }, height: { ideal: 1080 } }; // Desktop: Full HD
+            ? { width: { ideal: 960 }, height: { ideal: 540 } } // Lower resolution for faster focusing
+            : { width: { ideal: 1280 }, height: { ideal: 720 } };
 
           stream = await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: 'environment',
               focusMode: 'continuous',
               ...resolution,
-              zoom: zoomLevel,
-              advanced: [{ torch: false }] // Disable torch by default
+              advanced: [{ torch: false }]
             }
           });
           video.srcObject = stream;
           video.style.display = 'block';
           scannerOverlay.style.display = 'flex';
           resultModal.style.display = 'none';
-          zoomControl.style.display = 'block';
 
-          // Apply zoom
-          zoomControl.oninput = () => {
-            zoomLevel = parseFloat(zoomControl.value);
-            video.style.transform = `scale(${zoomLevel})`;
-            const track = stream.getVideoTracks()[0];
-            if (track && track.getCapabilities().zoom) {
-              track.applyConstraints({ advanced: [{ zoom: zoomLevel * 10 }] }).catch(err => {
-                console.warn('Zoom not supported:', err);
-              });
+          // Attempt to trigger focus manually if continuous fails
+          const track = stream.getVideoTracks()[0];
+          let focusAttempts = 0;
+          const maxFocusAttempts = 3;
+
+          const focusInterval = setInterval(() => {
+            if (track && track.getCapabilities().focusMode && focusAttempts < maxFocusAttempts) {
+              track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
+                .catch(err => console.warn('Focus not supported:', err));
+              focusAttempts++;
             }
-          };
+          }, 2000);
 
           codeReader.decodeFromVideoDevice(null, 'preview', async (result, err) => {
             if (result) {
+              clearInterval(focusInterval); // Stop focus attempts
               const barcode = result.text;
-              let format = result.format; // e.g., EAN_13
-              format = format.replace('ZXing.', ''); // Clean up format name
+              let format = result.format;
+              format = format.replace('ZXing.', '');
 
               try {
                 const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`);
@@ -220,7 +197,6 @@
                 codeReader.reset();
                 video.style.display = 'none';
                 scannerOverlay.style.display = 'none';
-                zoomControl.style.display = 'none';
 
                 // Show result modal
                 barcodeType.textContent = `Type: ${format}`;
@@ -239,12 +215,10 @@
                 }
                 resultModal.style.display = 'block';
 
-                // Google button action
                 googleBtn.onclick = () => {
                   window.open(`https://www.google.com/search?q=${barcode}`, '_blank');
                 };
 
-                // Dismiss button restarts scanning
                 dismissBtn.onclick = () => {
                   codeReader = new ZXing.BrowserMultiFormatReader();
                   startScanning();
