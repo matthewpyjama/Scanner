@@ -145,17 +145,18 @@
           console.log('[DEBUG] Checking if ScanbotSDK is available...');
           const ScanbotSDK = window.ScanbotSDK;
           if (!ScanbotSDK) {
-            throw new Error('Scanbot SDK not loaded. Please ensure the script and engine files are included correctly.');
+            throw new Error('Scanbot SDK not loaded. Check if lib/ScanbotSDK.min.js is accessible.');
           }
-          console.log('[DEBUG] ScanbotSDK found. Initializing SDK...');
+          console.log('[DEBUG] ScanbotSDK object:', ScanbotSDK);
+          console.log('[DEBUG] Initializing SDK with enginePath: lib/');
           const scanbotSDK = await ScanbotSDK.initialize({
             licenseKey: '', // Empty for trial mode
-            enginePath: 'lib/' // Updated to use enginePath instead of engine
+            enginePath: 'lib/' // Path to engine files
           });
           console.log('[DEBUG] SDK initialized successfully:', scanbotSDK);
           return scanbotSDK;
         } catch (err) {
-          console.error('Scanbot initialization error:', err);
+          console.error('[DEBUG] Scanbot initialization error:', err.message, err.stack);
           status.textContent = `Error: ${err.message}. Please reload and try again.`;
           return null;
         }
@@ -168,6 +169,7 @@
           console.log('[DEBUG] SDK initialization failed. Cannot start scanner.');
           return;
         }
+        console.log('[DEBUG] SDK object before UI call:', sdk);
 
         try {
           status.textContent = 'Starting scanner...';
