@@ -13,6 +13,8 @@
       font-size: 18px;
     }
   </style>
+  <!-- Load ZXing library from CDN -->
+  <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
 </head>
 <body>
   <video id="preview" autoplay muted playsinline></video>
@@ -20,15 +22,11 @@
 
   <script>
     window.onload = async function() {
-      // Check if BarcodeDetector is supported
-      if (!('BarcodeDetector' in window)) {
-        document.getElementById('result').textContent = 
-          'Barcode Detector is not supported by this browser.';
-        return;
-      }
-
       const video = document.getElementById('preview');
       const resultDiv = document.getElementById('result');
+
+      // Initialize ZXing code reader
+      const codeReader = new ZXing.BrowserMultiFormatReader();
 
       try {
         // Request camera access
@@ -37,56 +35,32 @@
         });
         video.srcObject = stream;
 
-        // Create barcode detector
-        const barcodeDetector = new BarcodeDetector({
-          formats: [
-            'qr_code',
-            'upc_a',
-            'upc_e',
-            'ean_13',
-            'ean_8',
-            'code_39',
-            'code_128',
-            'itf',
-            'codabar',
-            'data_matrix'
-          ]
-        });
-
-        // Continuous scanning
-        async function scanBarcode() {
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-          try {
-            const barcodes = await barcodeDetector.detect(canvas);
-            if (barcodes.length > 0) {
-              resultDiv.textContent = `Detected barcode: ${barcodes[0].rawValue}`;
-            } else {
-              resultDiv.textContent = 'No barcode detected';
-            }
-          } catch (err) {
-            console.error('Detection error:', err);
-            resultDiv.textContent = 'Error detecting barcode';
+        // Start decoding from video stream
+        codeReader.decodeFromVideoDevice(null, 'preview', (result, err) => {
+          if (result) {
+            resultDiv.textContent = `Detected barcode: ${result.text}`;
+            // Optionally stop scanning after detection
+            // codeReader.reset();
+          } else if (err && !(err instanceof ZXing.NotFoundException)) {
+            console.error('Decoding error:', err);
+            resultDiv.textContent = 'Error decoding barcode';
+          } else {
+            resultDiv.textContent = 'No barcode detected';
           }
-
-          // Continue scanning
-          requestAnimationFrame(scanBarcode);
-        }
-
-        // Start scanning when video is ready
-        video.onloadedmetadata = () => {
-          video.play();
-          scanBarcode();
-        };
+        });
 
       } catch (err) {
         console.error('Camera error:', err);
         resultDiv.textContent = 'Error accessing camera: ' + err.message;
       }
+
+      // Clean up on page unload
+      window.onunload = () => {
+        codeReader.reset();
+        if (video.srcObject) {
+          video.srcObject.getTracks().forEach(track => track.stop());
+        }
+      };
     };
   </script>
 </body>
