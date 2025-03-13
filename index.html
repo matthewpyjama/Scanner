@@ -145,9 +145,9 @@
       try {
         console.log('[DEBUG] Initializing Scanbot SDK...');
         scanbotSDK = await ScanbotSDK.initialize({
-          licenseKey: '', // Empty for trial mode
-          enginePath: 'https://matthewpyjama.github.io/Scanner/lib/' // Absolute path to engine files
-        });
+  licenseKey: '', // Empty for trial mode
+  enginePath: 'https://matthewpyjama.github.io/Scanner/lib/'
+});
         console.log('[DEBUG] Scanbot SDK initialized successfully:', scanbotSDK);
         const licenseInfo = await scanbotSDK.getLicenseInfo();
         console.log('[DEBUG] License Info:', licenseInfo);
