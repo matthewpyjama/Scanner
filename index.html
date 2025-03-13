@@ -3,20 +3,9 @@
 <head>
   <title>Barcode Scanner</title>
   <style>
-    video {
-      width: 100%;
-      max-width: 640px;
-      height: auto;
-    }
-    #result {
-      margin-top: 20px;
-      font-size: 18px;
-    }
-    #itemImage {
-      max-width: 100%;
-      height: auto;
-      margin-top: 10px;
-    }
+    video { width: 100%; max-width: 640px; height: auto; }
+    #result { margin-top: 20px; font-size: 18px; }
+    #itemImage { max-width: 100%; height: auto; margin-top: 10px; }
   </style>
   <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
 </head>
@@ -31,8 +20,7 @@
       const resultDiv = document.getElementById('result');
       const itemImage = document.getElementById('itemImage');
 
-      // Replace with your Google Apps Script Web App URL
-      const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-kW76mbuh3ZZWe7ZB3kIkgVTYmsMJ7uluEcknSpxlCE3vKwMhoE8roTTAVhe3jmX/exec'; // UPDATE THIS!
+      const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-kW76mbuh3ZZWe7ZB3kIkgVTYmsMJ7uluEcknSpxlCE3vKwMhoE8roTTAVhe3jmX/exec';
 
       const codeReader = new ZXing.BrowserMultiFormatReader();
 
@@ -46,21 +34,32 @@
           if (result) {
             const barcode = result.text;
             resultDiv.textContent = `Scanned barcode: ${barcode}`;
+            console.log('Barcode detected:', barcode); // Debug Step 1
 
             try {
+              console.log('Fetching from:', `${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`); // Debug Step 2
               const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`);
+              console.log('Fetch status:', response.status); // Debug Step 3
+              if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+              }
               const data = await response.json();
+              console.log('API Response:', data); // Debug Step 4
 
-              if (data.error) {
+              if (data.error || !data.itemName) {
                 resultDiv.textContent = `No item found for barcode: ${barcode}`;
                 itemImage.style.display = 'none';
+                console.log('No item found or invalid response'); // Debug Step 5
               } else {
+                console.log('Updating UI with:', data.itemName, data.imageUrl); // Debug Step 6
                 resultDiv.textContent = `Item: ${data.itemName} (Barcode: ${barcode})`;
                 if (data.imageUrl) {
                   itemImage.src = data.imageUrl;
                   itemImage.style.display = 'block';
+                  console.log('Image set to:', data.imageUrl); // Debug Step 7
                 } else {
                   itemImage.style.display = 'none';
+                  console.log('No image URL provided'); // Debug Step 8
                 }
               }
             } catch (fetchErr) {
@@ -68,9 +67,6 @@
               resultDiv.textContent = `Error fetching item: ${fetchErr.message}`;
               itemImage.style.display = 'none';
             }
-
-            // Uncomment to stop scanning after detection
-            // codeReader.reset();
           } else if (err && !(err instanceof ZXing.NotFoundException)) {
             console.error('Decoding error:', err);
             resultDiv.textContent = 'Error decoding barcode';
