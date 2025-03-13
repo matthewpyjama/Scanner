@@ -53,6 +53,18 @@
       text-align: center;
       padding: 10px;
     }
+    #status {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-size: 14px;
+      z-index: 10;
+    }
     #result-modal {
       position: fixed;
       top: 50%;
@@ -108,6 +120,10 @@
       background: #ccc;
       color: black;
     }
+    #redirect-btn {
+      background: #4CAF50;
+      color: white;
+    }
   </style>
   <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
 </head>
@@ -117,6 +133,7 @@
     <div id="scanner-overlay">
       <div id="scanner-finder">Move the finder over a barcode</div>
     </div>
+    <div id="status">Scanning...</div>
   </div>
   <div id="result-modal">
     <h2>Barcode Details</h2>
@@ -126,6 +143,7 @@
     <p id="item-name"></p>
     <div class="button-group">
       <button id="google-btn">Google the code</button>
+      <button id="redirect-btn">Go to Item Page</button>
       <button id="dismiss-btn">Dismiss</button>
     </div>
   </div>
@@ -139,8 +157,10 @@
       const itemImage = document.getElementById('itemImage');
       const itemName = document.getElementById('item-name');
       const googleBtn = document.getElementById('google-btn');
+      const redirectBtn = document.getElementById('redirect-btn');
       const dismissBtn = document.getElementById('dismiss-btn');
       const scannerOverlay = document.getElementById('scanner-overlay');
+      const status = document.getElementById('status');
 
       const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-kW76mbuh3ZZWe7ZB3kIkgVTYmsMJ7uluEcknSpxlCE3vKwMhoE8roTTAVhe3jmX/exec';
 
@@ -149,10 +169,9 @@
 
       async function startScanning() {
         try {
-          // Dynamically adjust resolution for mobile devices
           const isMobile = /Mobi|Android/i.test(navigator.userAgent);
           const resolution = isMobile
-            ? { width: { ideal: 960 }, height: { ideal: 540 } } // Lower resolution for faster focusing
+            ? { width: { ideal: 960 }, height: { ideal: 540 } }
             : { width: { ideal: 1280 }, height: { ideal: 720 } };
 
           stream = await navigator.mediaDevices.getUserMedia({
@@ -167,90 +186,13 @@
           video.style.display = 'block';
           scannerOverlay.style.display = 'flex';
           resultModal.style.display = 'none';
+          status.style.display = 'block';
+          status.textContent = 'Scanning...';
 
-          // Attempt to trigger focus manually if continuous fails
           const track = stream.getVideoTracks()[0];
           let focusAttempts = 0;
           const maxFocusAttempts = 3;
 
           const focusInterval = setInterval(() => {
             if (track && track.getCapabilities().focusMode && focusAttempts < maxFocusAttempts) {
-              track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
-                .catch(err => console.warn('Focus not supported:', err));
-              focusAttempts++;
-            }
-          }, 2000);
-
-          codeReader.decodeFromVideoDevice(null, 'preview', async (result, err) => {
-            if (result) {
-              clearInterval(focusInterval); // Stop focus attempts
-              const barcode = result.text;
-              let format = result.format;
-              format = format.replace('ZXing.', '');
-
-              try {
-                const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?code=${barcode}`);
-                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-                const data = await response.json();
-
-                // Stop scanning
-                codeReader.reset();
-                video.style.display = 'none';
-                scannerOverlay.style.display = 'none';
-
-                // Show result modal
-                barcodeType.textContent = `Type: ${format}`;
-                barcodeValue.textContent = `Value: ${barcode}`;
-                if (data.error || !data.itemName) {
-                  itemName.textContent = 'Item not found';
-                  itemImage.style.display = 'none';
-                } else {
-                  itemName.textContent = `Item: ${data.itemName}`;
-                  if (data.imageUrl) {
-                    itemImage.src = data.imageUrl;
-                    itemImage.style.display = 'block';
-                  } else {
-                    itemImage.style.display = 'none';
-                  }
-                }
-                resultModal.style.display = 'block';
-
-                googleBtn.onclick = () => {
-                  window.open(`https://www.google.com/search?q=${barcode}`, '_blank');
-                };
-
-                dismissBtn.onclick = () => {
-                  codeReader = new ZXing.BrowserMultiFormatReader();
-                  startScanning();
-                };
-              } catch (fetchErr) {
-                console.error('Fetch error:', fetchErr);
-                barcodeType.textContent = 'Error';
-                barcodeValue.textContent = `Error fetching item: ${fetchErr.message}`;
-                itemImage.style.display = 'none';
-                resultModal.style.display = 'block';
-              }
-            } else if (err && !(err instanceof ZXing.NotFoundException)) {
-              console.error('Decoding error:', err);
-            }
-          });
-        } catch (err) {
-          console.error('Camera error:', err);
-          alert('Error accessing camera: ' + err.message);
-        }
-      }
-
-      // Start scanning initially
-      startScanning();
-
-      // Cleanup on unload
-      window.onunload = () => {
-        codeReader.reset();
-        if (stream) {
-          stream.getTracks().forEach(track => track.stop());
-        }
-      };
-    };
-  </script>
-</body>
-</html>
+              track.applyConstraints({ advanced
